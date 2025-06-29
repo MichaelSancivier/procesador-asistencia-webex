@@ -208,4 +208,21 @@ if uploaded_file is not None:
                 # Crear el link de descarga
                 csv_buffer = io.StringIO()
                 df_reporte.to_csv(csv_buffer, index=False, encoding='utf-8')
-                csv_bytes
+                csv_bytes = csv_buffer.getvalue().encode('utf-8')
+    
+                st.download_button(
+                    label="📤 Descargar Reporte CSV",
+                    data=csv_bytes,
+                    file_name="reporte_asistencia_moodle.csv",
+                    mime="text/csv",
+                    help="Clique para baixar o arquivo CSV final."
+                )
+            else:
+                st.warning("No se pudo generar el reporte. Verifique el formato de su archivo CSV.")
+
+    except Exception as e:
+        st.error(f"Ocurrió un error inesperado: {e}")
+        st.info("Asegúrese de que el archivo es un CSV válido de Webex y de que tiene todas las columnas requeridas.")
+
+st.divider()
+st.markdown("Creado con ❤️ por el Agente Procesador de Asistencia.")
