@@ -23,7 +23,7 @@ def processar_assistencia(df_input):
     # ===============================================================
     st.info(f"Colunas encontradas no arquivo (após limpeza): {list(df.columns)}")
     # ===============================================================
-    
+
     # Mapeamento de colunas esperadas (com nomes exatos confirmados)
     colunas_esperadas = [
         'Nome da reunião', 'Data de início da reunião', 'Data de término da reunião', 
@@ -46,6 +46,21 @@ def processar_assistencia(df_input):
     df.dropna(subset=['E-mail do convidado', 'Hora da entrada', 'Hora da saída'], inplace=True)
     registros_ignorados = registros_validos_antes - len(df)
     
+    # --- CORREÇÃO: CONVERTER COLUNA 'DURAÇÃO' PARA NÚMERO ---
+    try:
+        # Substituir vírgulas por pontos para o pandas entender como decimal
+        df['Duração da presença'] = df['Duração da presença'].astype(str).str.replace(',', '.', regex=False)
+        # Converter para numérico, forçando valores inválidos para NaN
+        df['Duração da presença'] = pd.to_numeric(df['Duração da presença'], errors='coerce')
+        # Remover linhas onde a duração não é um número
+        registros_validos_antes_duracao = len(df)
+        df.dropna(subset=['Duração da presença'], inplace=True)
+        registros_ignorados += registros_validos_antes_duracao - len(df)
+    except Exception as e:
+        st.error(f"Erro ao limpar a coluna 'Duração da presença'. Verifique se ela contém apenas valores numéricos. Erro: {e}")
+        return None, None
+    # --------------------------------------------------------
+
     if df.empty:
         return None, {"total_registros_processados": total_registros_processados, 
                       "registros_ignorados": registros_ignorados, 
@@ -155,13 +170,11 @@ uploaded_file = st.file_uploader("📥 Cargue el archivo CSV aquí", type=["csv"
 if uploaded_file is not None:
     try:
         df_input = None
-        # Lista de configurações para tentar (priorizando TSV e a codificação certa)
         read_configs = [
-            {'encoding': 'utf-16', 'sep': '\t', 'header': 0}, # Melhor tentativa
-            {'encoding': 'utf-8-sig', 'sep': '\t', 'header': 0},
-            {'encoding': 'latin1', 'sep': '\t', 'header': 0},
-            {'encoding': 'utf-8', 'delim_whitespace': True, 'header': 0}, # Mantém o que funcionou antes
+            {'encoding': 'utf-16', 'delim_whitespace': True, 'header': 0},
+            {'encoding': 'utf-8-sig', 'sep': '\t', 'header': 0}, 
             {'encoding': 'latin1', 'delim_whitespace': True, 'header': 0},
+            {'encoding': 'utf-8', 'delim_whitespace': True, 'header': 0},
             {'encoding': 'utf-8', 'sep': ',', 'header': 0},
             {'encoding': 'latin1', 'sep': ',', 'header': 0},
             {'encoding': 'utf-8', 'sep': ';', 'header': 0},
@@ -178,7 +191,7 @@ if uploaded_file is not None:
             except (UnicodeDecodeError, pd.errors.ParserError):
                 continue
             except Exception:
-                continue
+                continue 
 
         if df_input is None or df_input.empty or len(df_input.columns) <= 1:
             st.error("Erro ao ler o arquivo. Não foi possível determinar a codificação ou o delimitador correto. Tente salvar o CSV como UTF-8 com vírgulas ou tabulações como delimitador.")
