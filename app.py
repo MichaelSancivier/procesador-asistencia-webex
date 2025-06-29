@@ -149,28 +149,25 @@ uploaded_file = st.file_uploader("📥 Cargue el archivo CSV aquí", type=["csv"
 if uploaded_file is not None:
     try:
         df_input = None
-        # Lista de configurações para tentar: (delimitador, codificação)
+        # Lista de configurações para tentar:
+        # Prioriza o delimitador de espaço em branco (tab, espaço, etc.)
         read_configs = [
-            # 1. Tenta tabulação, que é o formato mais provável do seu arquivo
-            {'sep': '\t', 'encoding': 'utf-8'},
-            {'sep': '\t', 'encoding': 'latin1'},
-            {'sep': '\t', 'encoding': 'cp1252'},
-            # 2. Tenta vírgula, para o caso de ser um CSV tradicional
-            {'sep': ',', 'encoding': 'utf-8'},
-            {'sep': ',', 'encoding': 'latin1'},
-            # 3. Tenta ponto e vírgula, para o caso de ser um CSV do Excel Europeu
-            {'sep': ';', 'encoding': 'utf-8'},
-            {'sep': ';', 'encoding': 'latin1'},
+            {'encoding': 'utf-8', 'delim_whitespace': True},
+            {'encoding': 'latin1', 'delim_whitespace': True},
+            {'encoding': 'cp1252', 'delim_whitespace': True},
+            {'encoding': 'utf-8', 'sep': ','},
+            {'encoding': 'latin1', 'sep': ','},
+            {'encoding': 'utf-8', 'sep': ';'},
+            {'encoding': 'latin1', 'sep': ';'},
         ]
         
-        # Tenta cada configuração até que a leitura seja bem-sucedida
         for config in read_configs:
             try:
-                uploaded_file.seek(0)  # Volta ao início do arquivo para cada tentativa
+                uploaded_file.seek(0)  # Volta ao início do arquivo
                 df_input = pd.read_csv(uploaded_file, **config)
                 # Verifica se a leitura foi bem-sucedida (mais de 1 coluna)
                 if not df_input.empty and len(df_input.columns) > 1:
-                    st.info(f"Arquivo lido com sucesso! Delimitador: '{config['sep']}', Codificação: '{config['encoding']}'.")
+                    st.info(f"Arquivo lido com sucesso! Delimitador: '{config.get('sep', 'whitespace')}', Codificação: '{config['encoding']}'.")
                     break  # Sai do loop se encontrar a configuração correta
             except (UnicodeDecodeError, pd.errors.ParserError):
                 continue  # Tenta a próxima configuração
