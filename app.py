@@ -1,53 +1,3 @@
-Ah, entendi perfeitamente\! Receber duas mensagens de erro diferentes indica que seu arquivo CSV tem dois problemas: um de **codificação** e outro de **formato/nome das colunas**.
-
-Vamos analisar cada um e ver a solução.
-
------
-
-### **Análise dos Erros e Soluções**
-
-#### **Erro 1: `Erro: A coluna 'Nome da reunião' não foi encontrada no arquivo.`**
-
-Este erro é muito claro. O agente está procurando uma coluna com o nome `Nome da reunião`, mas não a encontrou no seu arquivo. Isso pode acontecer por vários motivos:
-
-  * **Diferença de idioma:** O relatório Webex foi gerado em inglês ou em outro idioma, e o nome da coluna é `Meeting Name` em vez de `Nome da reunião`.
-  * **Nome da coluna ligeiramente diferente:** Pode ser que o nome seja `Nome da Reunião` (com "R" maiúsculo) ou `NomeReunião` sem espaços.
-  * **Espaços extras:** O nome pode ter um espaço extra no início ou no fim (`" Nome da reunião "` ou `"Nome da reunião "`).
-  * **Relatório diferente:** Você pode ter baixado um tipo de relatório diferente (por exemplo, um relatório de uso em vez de um relatório de presença detalhado), que não contém todas as colunas que o agente espera.
-
-**Solução:**
-
-Você precisa garantir que o nome da coluna no seu arquivo CSV seja **exatamente** o que o código espera. O código que te enviei agora faz uma verificação inicial e vai te dizer qual coluna está faltando, o que é ótimo.
-
-Para resolver, você tem duas opções:
-
-1.  **Ajuste o nome da coluna no seu CSV:** A maneira mais simples. Abra o arquivo CSV em um editor de texto (como Notepad++), Google Sheets ou Excel e mude o nome do cabeçalho da coluna para `Nome da reunião` (e os outros nomes que ele possa reclamar depois). Salve o arquivo.
-2.  **Ajuste o código:** Se você sempre recebe relatórios com nomes de coluna diferentes, podemos ajustar o código para ser mais flexível, mapeando os nomes. Por exemplo:
-    ```python
-    df.rename(columns={'Meeting Name': 'Nome da reunião', 'Duration of presence': 'Duração da presença'}, inplace=True)
-    ```
-
------
-
-#### **Erro 2: `No se pudo generar el reporte. Verifique el formato de su archivo CSV.`**
-
-Este erro é o resultado do primeiro. Como a função `processar_assistencia` não consegue encontrar as colunas essenciais, ela retorna `None`, e a interface do Streamlit exibe essa mensagem genérica de que o relatório não pôde ser gerado.
-
-**Solução:**
-
-A solução para este erro depende de você resolver o **Erro 1**. Assim que o agente conseguir encontrar todas as colunas que precisa, o relatório será gerado normalmente.
-
------
-
-### **Recomendação e Próximos Passos**
-
-1.  **Abra o arquivo CSV original:** Use um editor de texto simples para abrir o arquivo CSV exportado do Webex.
-2.  **Verifique os nomes das colunas:** Olhe atentamente a primeira linha do arquivo (o cabeçalho) e veja os nomes exatos das colunas.
-3.  **Ajuste seu código `app.py`:** Use a lista de colunas que você encontrou para ajustar a verificação no código. Eu vou te dar uma versão do código que já faz isso de forma mais robusta, mas você precisará verificar os nomes.
-
-Aqui está o código `app.py` com uma verificação de colunas mais robusta e a correção de codificação:
-
-```python
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
@@ -258,4 +208,3 @@ if uploaded_file is not None:
 
 st.divider()
 st.markdown("Creado con ❤️ por el Agente Procesador de Asistencia.")
-```
