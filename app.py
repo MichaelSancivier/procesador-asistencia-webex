@@ -18,6 +18,12 @@ def processar_assistencia(df_input):
     # 1. Limpar os nomes das colunas: remover espaços em branco no início/fim
     df.columns = df.columns.str.strip()
     
+    # ===============================================================
+    # --- PASSO DE DEPURAÇÃO: EXIBIR AS COLUNAS Lidas ---
+    # ===============================================================
+    st.info(f"Colunas encontradas no arquivo (após limpeza): {list(df.columns)}")
+    # ===============================================================
+
     # Mapeamento de colunas esperadas (com nomes exatos confirmados)
     colunas_esperadas = [
         'Nome da reunião', 'Data de início da reunião', 'Data de término da reunião', 
@@ -149,8 +155,6 @@ uploaded_file = st.file_uploader("📥 Cargue el archivo CSV aquí", type=["csv"
 if uploaded_file is not None:
     try:
         df_input = None
-        # Lista de configurações para tentar:
-        # Prioriza o delimitador de espaço em branco (tab, espaço, etc.)
         read_configs = [
             {'encoding': 'utf-8', 'delim_whitespace': True},
             {'encoding': 'latin1', 'delim_whitespace': True},
@@ -163,16 +167,14 @@ if uploaded_file is not None:
         
         for config in read_configs:
             try:
-                uploaded_file.seek(0)  # Volta ao início do arquivo
+                uploaded_file.seek(0)
                 df_input = pd.read_csv(uploaded_file, **config)
-                # Verifica se a leitura foi bem-sucedida (mais de 1 coluna)
                 if not df_input.empty and len(df_input.columns) > 1:
                     st.info(f"Arquivo lido com sucesso! Delimitador: '{config.get('sep', 'whitespace')}', Codificação: '{config['encoding']}'.")
-                    break  # Sai do loop se encontrar a configuração correta
+                    break  
             except (UnicodeDecodeError, pd.errors.ParserError):
-                continue  # Tenta a próxima configuração
+                continue
 
-        # Se depois de todas as tentativas o DataFrame ainda não foi lido, exibe erro
         if df_input is None or df_input.empty or len(df_input.columns) <= 1:
             st.error("Erro ao ler o arquivo. Não foi possível determinar a codificação ou o delimitador correto. Tente salvar o CSV como UTF-8 com vírgulas ou tabulações como delimitador.")
         
@@ -180,11 +182,9 @@ if uploaded_file is not None:
             st.success("¡Archivo cargado con éxito!")
             st.info("Procesando los datos... por favor, espere.")
     
-            # Chamar a função de processamento
             df_reporte, resumen_final = processar_assistencia(df_input)
     
             if df_reporte is not None:
-                # Mostrar el resumen en columnas
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric("👥 Registros Totales", resumen_final['total_registros_processados'])
                 col2.metric("❌ Registros Ignorados", resumen_final['registros_ignorados'])
@@ -195,7 +195,6 @@ if uploaded_file is not None:
                 st.header("📊 Reporte Final de Asistencia")
                 st.dataframe(df_reporte, use_container_width=True)
     
-                # Crear el link de descarga
                 csv_buffer = io.StringIO()
                 df_reporte.to_csv(csv_buffer, index=False, encoding='utf-8')
                 csv_bytes = csv_buffer.getvalue().encode('utf-8')
