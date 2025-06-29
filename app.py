@@ -149,44 +149,37 @@ uploaded_file = st.file_uploader("📥 Cargue el archivo CSV aquí", type=["csv"
 if uploaded_file is not None:
     try:
         df_input = None
-        # Tentar ler com o delimitador de tabulação (\t) e diferentes codificações
-        for encoding in ['utf-8', 'latin1', 'cp1252']:
-            try:
-                uploaded_file.seek(0)
-                df_input = pd.read_csv(uploaded_file, encoding=encoding, sep='\t')
-                # Se a leitura for bem-sucedida e o DataFrame não for vazio, use este
-                if not df_input.empty and len(df_input.columns) > 1:
-                    break  
-            except (UnicodeDecodeError, pd.errors.ParserError):
-                continue
+        # Lista de configurações para tentar: (delimitador, codificação)
+        read_configs = [
+            # 1. Tenta tabulação, que é o formato mais provável do seu arquivo
+            {'sep': '\t', 'encoding': 'utf-8'},
+            {'sep': '\t', 'encoding': 'latin1'},
+            {'sep': '\t', 'encoding': 'cp1252'},
+            # 2. Tenta vírgula, para o caso de ser um CSV tradicional
+            {'sep': ',', 'encoding': 'utf-8'},
+            {'sep': ',', 'encoding': 'latin1'},
+            # 3. Tenta ponto e vírgula, para o caso de ser um CSV do Excel Europeu
+            {'sep': ';', 'encoding': 'utf-8'},
+            {'sep': ';', 'encoding': 'latin1'},
+        ]
         
-        # Se a tabulação falhar, tentar com vírgula (,) e diferentes codificações
-        if df_input is None or df_input.empty or len(df_input.columns) <= 1:
-            for encoding in ['utf-8', 'latin1', 'cp1252']:
-                try:
-                    uploaded_file.seek(0)
-                    df_input = pd.read_csv(uploaded_file, encoding=encoding, sep=',')
-                    if not df_input.empty and len(df_input.columns) > 1:
-                        break
-                except (UnicodeDecodeError, pd.errors.ParserError):
-                    continue
+        # Tenta cada configuração até que a leitura seja bem-sucedida
+        for config in read_configs:
+            try:
+                uploaded_file.seek(0)  # Volta ao início do arquivo para cada tentativa
+                df_input = pd.read_csv(uploaded_file, **config)
+                # Verifica se a leitura foi bem-sucedida (mais de 1 coluna)
+                if not df_input.empty and len(df_input.columns) > 1:
+                    st.info(f"Arquivo lido com sucesso! Delimitador: '{config['sep']}', Codificação: '{config['encoding']}'.")
+                    break  # Sai do loop se encontrar a configuração correta
+            except (UnicodeDecodeError, pd.errors.ParserError):
+                continue  # Tenta a próxima configuração
 
-        # Se a vírgula falhar, tentar com ponto e vírgula (;) e diferentes codificações
-        if df_input is None or df_input.empty or len(df_input.columns) <= 1:
-            for encoding in ['utf-8', 'latin1', 'cp1252']:
-                try:
-                    uploaded_file.seek(0)
-                    df_input = pd.read_csv(uploaded_file, encoding=encoding, sep=';')
-                    if not df_input.empty and len(df_input.columns) > 1:
-                        break
-                except (UnicodeDecodeError, pd.errors.ParserError):
-                    continue
-
-        # Se ainda assim falhar, emitir um erro
+        # Se depois de todas as tentativas o DataFrame ainda não foi lido, exibe erro
         if df_input is None or df_input.empty or len(df_input.columns) <= 1:
             st.error("Erro ao ler o arquivo. Não foi possível determinar a codificação ou o delimitador correto. Tente salvar o CSV como UTF-8 com vírgulas ou tabulações como delimitador.")
-            
-        elif df_input is not None:
+        
+        else: # O DataFrame foi lido com sucesso
             st.success("¡Archivo cargado con éxito!")
             st.info("Procesando los datos... por favor, espere.")
     
