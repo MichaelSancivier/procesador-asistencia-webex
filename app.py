@@ -33,7 +33,6 @@ def processar_assistencia(df_input):
 
     total_registros_processados = len(df)
     
-    # --- PASSO DE DEPURACÃO: Contagem inicial de registros ---
     st.info(f"Total de registros lidos: {total_registros_processados}")
     
     registros_validos_antes = len(df)
@@ -42,7 +41,6 @@ def processar_assistencia(df_input):
     df.dropna(subset=['E-mail do convidado', 'Hora da entrada', 'Hora da saída', 'Duração da presença'], inplace=True)
     registros_ignorados = registros_validos_antes - len(df)
 
-    # --- PASSO DE DEPURACÃO: Após a primeira limpeza ---
     st.info(f"Registros restantes após remover linhas com dados cruciais faltantes: {len(df)}")
 
     # 2. Converter a coluna de duração para numérico
@@ -73,6 +71,11 @@ def processar_assistencia(df_input):
     # 3. Converter colunas de tempo para o formato datetime
     try:
         st.info("Tentando converter colunas de data/hora...")
+        # --- CORREÇÃO FINAL: REMOVER FORMATO DE FÓRMULA DO EXCEL ---
+        for col in ['Hora da entrada', 'Hora da saída', 'Data de início da reunião', 'Data de término da reunião']:
+            df[col] = df[col].astype(str).str.replace('="', '', regex=False).str.replace('"', '', regex=False)
+        # -----------------------------------------------------------
+        
         df['Hora da entrada'] = pd.to_datetime(df['Hora da entrada'])
         df['Hora da saída'] = pd.to_datetime(df['Hora da saída'])
         df['Data de início da reunião'] = pd.to_datetime(df['Data de início da reunião'])
@@ -93,10 +96,9 @@ def processar_assistencia(df_input):
         st.error("Erro: Não foi possível calcular a duração da aula. Verifique as datas de início e término da reunião.")
         return None, None
 
-    # --- CORREÇÃO FINAL: Garantir que Nome/Sobrenome sejam strings ---
-    df['Nome'] = df['Nome'].fillna('')
-    df['Sobrenome'] = df['Sobrenome'].fillna('')
-    # -----------------------------------------------------------------
+    # --- GARANTIR QUE NOME/SOBRENOME SEJAM STRINGS ---
+    df['Nome'] = df['Nome'].fillna('').astype(str)
+    df['Sobrenome'] = df['Sobrenome'].fillna('').astype(str)
 
     # 5. Agrupar por e-mail para consolidar os registros
     grupos_por_email = df.groupby('E-mail do convidado')
@@ -132,7 +134,6 @@ def processar_assistencia(df_input):
         porcentagem_tramos = (tramos_participados / total_tramos) * 100 if total_tramos > 0 else 0
         status = 'Presente' if porcentagem_tempo >= 80 and porcentagem_tramos >= 80 else 'Ausente'
         
-        # Agora a concatenação de strings funcionará
         nome_aluno = str(grupo.iloc[0]['Nome']) + ' ' + str(grupo.iloc[0]['Sobrenome'])
             
         resultados.append({
