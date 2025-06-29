@@ -5,7 +5,7 @@ import io
 import re
 
 # ====================================================================
-# Função de processamento do CSV de Webex
+# Función de procesamiento del CSV de Webex
 # ====================================================================
 def processar_assistencia(df_input):
     """
@@ -13,6 +13,15 @@ def processar_assistencia(df_input):
     """
     df = df_input.copy()  # Trabalhar com uma cópia para não modificar o DataFrame original
     
+    # 1. Limpar os nomes das colunas: remover BOM e espaços em branco no início/fim
+    df.columns = [re.sub(r'^\ufeff|\ufeff', '', col).strip() for col in df.columns]
+    
+    # ===============================================================
+    # --- PASSO DE DEPURAÇÃO: EXIBIR AS COLUNAS Lidas ---
+    # ===============================================================
+    st.info(f"Colunas encontradas no arquivo (após limpeza): {list(df.columns)}")
+    # ===============================================================
+
     # Mapeamento de colunas esperadas (com nomes exatos confirmados)
     colunas_esperadas = [
         'Nome da reunião', 'Data de início da reunião', 'Data de término da reunião', 
@@ -20,21 +29,13 @@ def processar_assistencia(df_input):
         'Hora da entrada', 'Hora da saída', 'Duração da presença', 
         'Tipo de conexão', 'Nome da sessão'
     ]
-    
-    # 1. Definir o cabeçalho manualmente e remover linhas extras
-    # A primeira linha já foi lida como cabeçalho, então os dados começam na segunda linha
-    # Vamos renomear as colunas lidas para os nomes corretos
-    df.columns = colunas_esperadas
-    
-    # Contar registros totais e válidos antes da limpeza
-    total_registros_processados = len(df)
 
-    # 2. Verificar se todas as colunas esperadas existem no DataFrame
+    # 2. Verificar se todas as colunas esperadas estão presentes
     colunas_faltantes = [col for col in colunas_esperadas if col not in df.columns]
     
     if colunas_faltantes:
         st.error(f"Erro: As seguintes colunas não foram encontradas no arquivo: **{', '.join(colunas_faltantes)}**.")
-        st.info("A verificação manual do cabeçalho falhou. Isso pode indicar um arquivo com um formato inesperado.")
+        st.info("Verifique se o arquivo CSV é um relatório de presença Webex válido e se as colunas estão nomeadas corretamente.")
         return None, None
 
     registros_validos_antes = len(df)
@@ -152,32 +153,30 @@ uploaded_file = st.file_uploader("📥 Cargue el archivo CSV aquí", type=["csv"
 if uploaded_file is not None:
     try:
         df_input = None
-        
-        # Leemos el contenido del archivo una vez
-        file_content = uploaded_file.getvalue()
-        
         # Lista de configurações para tentar:
+        # Priorizamos a leitura com `header=0` para que a primeira linha seja sempre o cabeçalho
         read_configs = [
-            {'encoding': 'utf-16', 'sep': '\t', 'header': None},
-            {'encoding': 'utf-8-sig', 'sep': '\t', 'header': None}, # UTF-8 com BOM
-            {'encoding': 'utf-8', 'sep': '\t', 'header': None},
-            {'encoding': 'latin1', 'sep': '\t', 'header': None},
-            {'encoding': 'utf-8', 'sep': ',', 'header': 'infer'},
-            {'encoding': 'latin1', 'sep': ',', 'header': 'infer'},
-            {'encoding': 'utf-8', 'sep': ';', 'header': 'infer'},
-            {'encoding': 'latin1', 'sep': ';', 'header': 'infer'},
+            {'encoding': 'utf-16', 'delim_whitespace': True, 'header': 0},
+            {'encoding': 'utf-8-sig', 'delim_whitespace': True, 'header': 0}, # UTF-8 com BOM
+            {'encoding': 'utf-8', 'delim_whitespace': True, 'header': 0},
+            {'encoding': 'latin1', 'delim_whitespace': True, 'header': 0},
+            {'encoding': 'utf-8', 'sep': ',', 'header': 0},
+            {'encoding': 'latin1', 'sep': ',', 'header': 0},
+            {'encoding': 'utf-8', 'sep': ';', 'header': 0},
+            {'encoding': 'latin1', 'sep': ';', 'header': 0},
         ]
         
-        # Tenta cada configuração até que a leitura seja bem-sucedida
         for config in read_configs:
             try:
-                df_input = pd.read_csv(io.BytesIO(file_content), **config)
-                # Verifica se a leitura foi bem-sucedida (mais de 1 coluna)
+                uploaded_file.seek(0)
+                df_input = pd.read_csv(uploaded_file, **config)
                 if not df_input.empty and len(df_input.columns) > 1:
                     st.info(f"Arquivo lido com sucesso! Delimitador: '{config.get('sep', 'whitespace')}', Codificação: '{config['encoding']}'.")
                     break  
             except (UnicodeDecodeError, pd.errors.ParserError):
                 continue
+            except Exception:
+                continue # Continua se tiver outros erros de leitura
 
         if df_input is None or df_input.empty or len(df_input.columns) <= 1:
             st.error("Erro ao ler o arquivo. Não foi possível determinar a codificação ou o delimitador correto. Tente salvar o CSV como UTF-8 com vírgulas ou tabulações como delimitador.")
