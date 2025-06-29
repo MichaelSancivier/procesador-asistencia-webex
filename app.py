@@ -111,30 +111,13 @@ def processar_assistencia(df_input):
         tempo_total_min = grupo['Duração da presença'].sum()
         porcentagem_tempo = (tempo_total_min / duracao_total_aula_min) * 100
         
-        # 7. Análise por tramos
-        tramos_participados = 0
-        total_tramos = int(duracao_total_aula_min / 60)
-        if duracao_total_aula_min % 60 > 0:
-            total_tramos += 1
+        # --- CÁLCULO SIMPLIFICADO: APENAS PORCENTAGEM DE TEMPO ---
+        # Removendo a lógica de tramos
+        tramos_participados = 0 # Mantemos a variável para evitar erros, mas ela não é usada
+        porcentagem_tramos = 0.0 # O mesmo para esta variável
         
-        hora_inicio_aula = df['Data de início da reunião'].iloc[0]
-        
-        for i in range(total_tramos):
-            inicio_tramo = hora_inicio_aula + timedelta(minutes=i*60)
-            fim_tramo = inicio_tramo + timedelta(minutes=60)
-            participou_do_tramo = False
-            for _, registro in grupo.iterrows():
-                if (registro['Hora da entrada'] < fim_tramo) and (registro['Hora da saída'] > inicio_tramo):
-                    participou_do_tramo = True
-                    break
-            if participou_do_tramo:
-                tramos_participados += 1
-
-        porcentagem_tramos = (tramos_participados / total_tramos) * 100 if total_tramos > 0 else 0
-        
-        # --- CORREÇÃO FINAL: Substituir status por P e FI ---
-        status = 'P' if porcentagem_tempo >= 80 and porcentagem_tramos >= 80 else 'FI'
-        # -----------------------------------------------------
+        status = 'P' if porcentagem_tempo >= 80 else 'FI'
+        # -----------------------------------------------------------
         
         nome_aluno = str(grupo.iloc[0]['Nome']) + ' ' + str(grupo.iloc[0]['Sobrenome'])
             
@@ -145,8 +128,9 @@ def processar_assistencia(df_input):
             'Saída Consolidada': saida_consolidada.strftime('%Y-%m-%d %H:%M:%S'),
             'Tempo Total (min)': round(tempo_total_min, 2),
             'Porcentagem de Tempo (%)': round(porcentagem_tempo, 2),
-            'Tramos Participados': tramos_participados,
-            'Porcentagem de Tramos (%)': round(porcentagem_tramos, 2),
+            # Removendo as colunas de tramos do relatório final
+            # 'Tramos Participados': tramos_participados,
+            # 'Porcentagem de Tramos (%)': round(porcentagem_tramos, 2),
             'Status': status
         })
 
