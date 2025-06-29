@@ -141,8 +141,17 @@ uploaded_file = st.file_uploader("📥 Cargue el archivo CSV aquí", type=["csv"
 
 if uploaded_file is not None:
     try:
-        # Usar io.BytesIO para leer el archivo cargado en memoria
-        df_input = pd.read_csv(io.BytesIO(uploaded_file.getvalue()), encoding='utf-8')
+# Tenta ler com a codificação padrão 'utf-8' primeiro
+try:
+    df_input = pd.read_csv(io.BytesIO(uploaded_file.getvalue()), encoding='utf-8')
+except UnicodeDecodeError:
+    # Se falhar, tenta com a codificação 'latin1'
+    try:
+        df_input = pd.read_csv(io.BytesIO(uploaded_file.getvalue()), encoding='latin1')
+    except Exception as e:
+        # Se falhar novamente, exibe um erro mais genérico
+        st.error(f"Erro de codificação. Tente salvar o arquivo CSV com a codificação UTF-8. Erro detalhado: {e}")
+        return
         
         st.success("¡Archivo cargado con éxito!")
         st.info("Procesando los datos... por favor, espere.")
