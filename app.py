@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 import io
-import re # Importar a biblioteca de expressões regulares
+import re
 
 # ====================================================================
 # Función de procesamiento del CSV de Webex
@@ -17,7 +17,8 @@ def processar_assistencia(df_input):
     total_registros_processados = len(df)
     
     # 1. Limpar os nomes das colunas: remover BOM e espaços em branco no início/fim
-    df.columns = [re.sub(r'^\ufeff|\ufeff', '', col) for col in df.columns] # Remove UTF-8 BOM
+    # O pd.read_csv com encoding='utf-8-sig' já lida com o BOM, mas esta é uma camada extra de segurança
+    df.columns = [col.replace('\ufeff', '').strip() for col in df.columns] # Remove UTF-8 BOM
     df.columns = df.columns.str.strip() # Remove leading/trailing whitespace
     
     # ===============================================================
@@ -158,6 +159,7 @@ if uploaded_file is not None:
     try:
         df_input = None
         read_configs = [
+            {'encoding': 'utf-16', 'delim_whitespace': True}, # Nova prioridade para arquivos com BOM
             {'encoding': 'utf-8', 'delim_whitespace': True},
             {'encoding': 'latin1', 'delim_whitespace': True},
             {'encoding': 'cp1252', 'delim_whitespace': True},
