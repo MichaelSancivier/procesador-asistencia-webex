@@ -47,23 +47,17 @@ def processar_assistencia(df_input):
 
     # 2. Converter a coluna de duração para numérico
     try:
-        # CORREÇÃO FINAL: Remover qualquer texto que não seja um número, ponto ou vírgula
         df['Duração da presença'] = df['Duração da presença'].astype(str)
         df['Duração da presença'] = df['Duração da presença'].str.replace(r'[^0-9,.]', '', regex=True)
-        # Substituir vírgulas por pontos para o pandas entender como decimal
         df['Duração da presença'] = df['Duração da presença'].str.replace(',', '.', regex=False)
-        # Converter para numérico, forçando valores inválidos para NaN
         df['Duração da presença'] = pd.to_numeric(df['Duração da presença'], errors='coerce')
         
-        # --- PASSO DE DEPURACÃO: Amostra dos dados de duração ---
         st.info(f"Amostra da coluna 'Duração da presença' após a conversão: {list(df['Duração da presença'].head(5))}")
         
-        # Remover linhas onde a duração não é um número
         registros_validos_antes_duracao = len(df)
         df.dropna(subset=['Duração da presença'], inplace=True)
         registros_ignorados += registros_validos_antes_duracao - len(df)
         
-        # --- PASSO DE DEPURACÃO: Após a limpeza da duração ---
         st.info(f"Registros restantes após limpar a duração: {len(df)}")
         
     except Exception as e:
@@ -99,6 +93,11 @@ def processar_assistencia(df_input):
         st.error("Erro: Não foi possível calcular a duração da aula. Verifique as datas de início e término da reunião.")
         return None, None
 
+    # --- CORREÇÃO FINAL: Garantir que Nome/Sobrenome sejam strings ---
+    df['Nome'] = df['Nome'].fillna('')
+    df['Sobrenome'] = df['Sobrenome'].fillna('')
+    # -----------------------------------------------------------------
+
     # 5. Agrupar por e-mail para consolidar os registros
     grupos_por_email = df.groupby('E-mail do convidado')
     
@@ -133,10 +132,8 @@ def processar_assistencia(df_input):
         porcentagem_tramos = (tramos_participados / total_tramos) * 100 if total_tramos > 0 else 0
         status = 'Presente' if porcentagem_tempo >= 80 and porcentagem_tramos >= 80 else 'Ausente'
         
-        try:
-            nome_aluno = grupo.iloc[0]['Nome'] + ' ' + grupo.iloc[0]['Sobrenome']
-        except KeyError:
-            nome_aluno = grupo.iloc[0]['Nome de exibição']
+        # Agora a concatenação de strings funcionará
+        nome_aluno = str(grupo.iloc[0]['Nome']) + ' ' + str(grupo.iloc[0]['Sobrenome'])
             
         resultados.append({
             'Nome': nome_aluno,
@@ -179,10 +176,7 @@ uploaded_file = st.file_uploader("📥 Cargue el archivo CSV aquí", type=["csv"
 
 if uploaded_file is not None:
     try:
-        # AQUI ESTÁ A LÓGICA DE LEITURA
-        file_content_bytes = uploaded_file.getvalue()
         df_input = None
-        
         read_configs = [
             {'encoding': 'utf-16', 'sep': '\t', 'header': 0},
             {'encoding': 'utf-8-sig', 'sep': '\t', 'header': 0}, 
