@@ -4,17 +4,41 @@ from datetime import datetime, timedelta
 import io
 
 # ====================================================================
-# Función de procesamiento del CSV de Webex
+# Função de processamento do CSV de Webex
 # ====================================================================
 def processar_assistencia(df):
     """
     Processa um DataFrame de lista de presença do Webex e gera um relatório.
     """
-    # Contar registros totais y válidos antes de la limpieza
+    # Contar registros totais e válidos antes da limpeza
     total_registros_processados = len(df)
+    
+    # Renomear colunas para garantir que os nomes estejam corretos
+    colunas_esperadas = {
+        'Nome da reunião': 'Nome da reunião',
+        'Data de início da reunião': 'Data de início da reunião',
+        'Data de término da reunião': 'Data de término da reunião',
+        'Nome de exibição': 'Nome de exibição',
+        'Nome': 'Nome',
+        'Sobrenome': 'Sobrenome',
+        'Função': 'Função',
+        'E-mail do convidado': 'E-mail do convidado',
+        'Hora da entrada': 'Hora da entrada',
+        'Hora da saída': 'Hora da saída',
+        'Duração da presença': 'Duração da presença',
+        'Tipo de conexão': 'Tipo de conexão',
+        'Nome da sessão': 'Nome da sessão'
+    }
+    
+    # Verificar se todas as colunas esperadas estão presentes
+    for coluna_esperada in colunas_esperadas.keys():
+        if coluna_esperada not in df.columns:
+            st.error(f"Erro: A coluna '{coluna_esperada}' não foi encontrada no arquivo. Verifique se o arquivo CSV é um relatório Webex válido.")
+            return None, None
+
     registros_validos_antes = len(df)
     
-    # Remover registros con datos faltantes esenciales
+    # Remover registros com dados faltantes essenciais
     df.dropna(subset=['E-mail do convidado', 'Hora da entrada', 'Hora da saída'], inplace=True)
     registros_ignorados = registros_validos_antes - len(df)
     
@@ -24,21 +48,18 @@ def processar_assistencia(df):
                       "presentes": 0, "ausentes": 0}
 
     try:
-        # Convertir colunas de tiempo para el formato datetime
+        # Converter colunas de tempo para o formato datetime
         df['Hora da entrada'] = pd.to_datetime(df['Hora da entrada'])
         df['Hora da saída'] = pd.to_datetime(df['Hora da saída'])
         df['Data de início da reunião'] = pd.to_datetime(df['Data de início da reunião'])
         df['Data de término da reunião'] = pd.to_datetime(df['Data de término da reunião'])
-    except KeyError as e:
-        st.error(f"Erro: Coluna '{e.args[0]}' não encontrada no arquivo CSV. Certifique-se de que o arquivo é um relatório Webex válido com todas as colunas esperadas.")
-        return None, None
     except Exception as e:
-        st.error(f"Erro ao converter colunas de data/hora: {e}. Verifique o formato dos dados.")
+        st.error(f"Erro ao converter colunas de data/hora. Verifique o formato dos dados. Erro: {e}")
         return None, None
 
     # Calcular a duração total da aula
     try:
-        # Usamos .iloc[0] para pegar o primeiro registro, assumindo que a duração é a mesma para todos
+        # Pega a duração da primeira linha, pois a duração da aula é a mesma para todos
         duracao_total_aula_min = (df['Data de término da reunião'].iloc[0] - df['Data de início da reunião'].iloc[0]).total_seconds() / 60
     except IndexError:
         st.error("Erro: O arquivo está vazio ou não contém informações de duração da reunião.")
@@ -51,7 +72,6 @@ def processar_assistencia(df):
     # Agrupar por e-mail para consolidar os registros de cada aluno
     grupos_por_email = df.groupby('E-mail do convidado')
     
-    # Dicionário para armazenar os resultados consolidados
     resultados = []
 
     # Iterar sobre cada grupo (aluno) para consolidar os dados
@@ -94,11 +114,11 @@ def processar_assistencia(df):
         # Determinar o status
         status = 'Presente' if porcentagem_tempo >= 80 and porcentagem_tramos >= 80 else 'Ausente'
         
-        # Obter nome do aluno (pode pegar o primeiro registro)
+        # Obter nome do aluno (tenta usar Nome/Sobrenome, se não, usa Nome de exibição)
         try:
             nome_aluno = grupo.iloc[0]['Nome'] + ' ' + grupo.iloc[0]['Sobrenome']
         except KeyError:
-            nome_aluno = grupo.iloc[0]['Nome de exibição'] # Usa o nome de exibição se Nome/Sobrenome faltarem
+            nome_aluno = grupo.iloc[0]['Nome de exibição']
             
         resultados.append({
             'Nome': nome_aluno,
@@ -141,22 +161,18 @@ uploaded_file = st.file_uploader("📥 Cargue el archivo CSV aquí", type=["csv"
 
 if uploaded_file is not None:
     try:
-# Tenta ler com a codificação padrão 'utf-8' primeiro
-try:
-    df_input = pd.read_csv(io.BytesIO(uploaded_file.getvalue()), encoding='utf-8')
-except UnicodeDecodeError:
-    # Se falhar, tenta com a codificação 'latin1'
-    try:
-        df_input = pd.read_csv(io.BytesIO(uploaded_file.getvalue()), encoding='latin1')
-    except Exception as e:
-        # Se falhar novamente, exibe um erro mais genérico
-        st.error(f"Erro de codificação. Tente salvar o arquivo CSV com a codificação UTF-8. Erro detalhado: {e}")
-        return
+        # AQUI ESTÁ A CORREÇÃO DE CODIFICAÇÃO
+        # Tenta ler com a codificação padrão 'utf-8' e, se falhar, tenta com 'latin1'
+        try:
+            df_input = pd.read_csv(uploaded_file, encoding='utf-8')
+        except UnicodeDecodeError:
+            uploaded_file.seek(0) # Volta ao início do arquivo
+            df_input = pd.read_csv(uploaded_file, encoding='latin1')
         
         st.success("¡Archivo cargado con éxito!")
         st.info("Procesando los datos... por favor, espere.")
 
-        # Llamar a la función de procesamiento
+        # Chamar a função de processamento
         df_reporte, resumen_final = processar_assistencia(df_input.copy())
 
         if df_reporte is not None:
