@@ -47,7 +47,12 @@ def processar_assistencia(df_input):
 
     # 2. Converter a coluna de duração para numérico
     try:
-        df['Duração da presença'] = df['Duração da presença'].astype(str).str.replace(',', '.', regex=False)
+        # CORREÇÃO FINAL: Remover qualquer texto que não seja um número, ponto ou vírgula
+        df['Duração da presença'] = df['Duração da presença'].astype(str)
+        df['Duração da presença'] = df['Duração da presença'].str.replace(r'[^0-9,.]', '', regex=True)
+        # Substituir vírgulas por pontos para o pandas entender como decimal
+        df['Duração da presença'] = df['Duração da presença'].str.replace(',', '.', regex=False)
+        # Converter para numérico, forçando valores inválidos para NaN
         df['Duração da presença'] = pd.to_numeric(df['Duração da presença'], errors='coerce')
         
         # --- PASSO DE DEPURACÃO: Amostra dos dados de duração ---
@@ -178,7 +183,6 @@ if uploaded_file is not None:
         file_content_bytes = uploaded_file.getvalue()
         df_input = None
         
-        # Tentamos ler com codificação e delimitador, com cabeçalho explícito
         read_configs = [
             {'encoding': 'utf-16', 'sep': '\t', 'header': 0},
             {'encoding': 'utf-8-sig', 'sep': '\t', 'header': 0}, 
@@ -201,7 +205,7 @@ if uploaded_file is not None:
                     break  
             except (UnicodeDecodeError, pd.errors.ParserError):
                 continue
-            except Exception: # Captura outros erros de leitura
+            except Exception:
                 continue
 
         if df_input is None or df_input.empty or len(df_input.columns) <= 1:
@@ -222,7 +226,7 @@ if uploaded_file is not None:
                 
                 st.divider()
                 st.header("📊 Reporte Final de Asistencia")
-                st.dataframe(df_reporte, use_container_container=True)
+                st.dataframe(df_reporte, use_container_width=True)
     
                 csv_buffer = io.StringIO()
                 df_reporte.to_csv(csv_buffer, index=False, encoding='utf-8')
