@@ -13,17 +13,6 @@ def processar_assistencia(df_input):
     """
     df = df_input.copy()  # Trabalhar com uma cópia para não modificar o DataFrame original
     
-    # 1. Limpar os nomes das colunas: remover BOM e espaços em branco no início/fim
-    # O pd.read_csv com encoding='utf-8-sig' já lida com o BOM, mas esta é uma camada extra de segurança
-    df.columns = [col.replace('\ufeff', '').strip() for col in df.columns] # Remove UTF-8 BOM
-    df.columns = df.columns.str.strip() # Remove leading/trailing whitespace
-    
-    # ===============================================================
-    # --- PASSO DE DEPURAÇÃO: EXIBIR AS COLUNAS Lidas ---
-    # ===============================================================
-    st.info(f"Colunas encontradas no arquivo (após limpeza): {list(df.columns)}")
-    # ===============================================================
-
     # Mapeamento de colunas esperadas (com nomes exatos confirmados)
     colunas_esperadas = [
         'Nome da reunião', 'Data de início da reunião', 'Data de término da reunião', 
@@ -32,17 +21,26 @@ def processar_assistencia(df_input):
         'Tipo de conexão', 'Nome da sessão'
     ]
 
-    # 2. Verificar se todas as colunas esperadas estão presentes
-    colunas_faltantes = [col for col in colunas_esperadas if col not in df.columns]
-    
-    if colunas_faltantes:
-        st.error(f"Erro: As seguintes colunas não foram encontradas no arquivo: **{', '.join(colunas_faltantes)}**.")
-        st.info("Verifique se o arquivo CSV é um relatório de presença Webex válido e se as colunas estão nomeadas corretamente.")
+    # 1. Atribuir os nomes de colunas esperados (já foram lidos sem cabeçalho)
+    # A verificação de colunas agora é feita pelo índice, pois a leitura é manual
+    if len(df.columns) != len(colunas_esperadas):
+        st.error(f"Erro: O número de colunas encontradas ({len(df.columns)}) não corresponde ao número de colunas esperadas ({len(colunas_esperadas)}).")
+        st.info("Isso pode indicar que o arquivo tem um formato diferente ou dados corrompidos.")
         return None, None
+        
+    df.columns = colunas_esperadas # Atribui o cabeçalho correto
+    
+    # ===============================================================
+    # --- PASSO DE DEPURAÇÃO: EXIBIR AS COLUNAS Lidas ---
+    # ===============================================================
+    st.info(f"Colunas do DataFrame (após atribuição manual): {list(df.columns)}")
+    # ===============================================================
 
+    # Contar registros totais e válidos antes da limpeza
+    total_registros_processados = len(df)
     registros_validos_antes = len(df)
     
-    # 3. Remover registros com dados faltantes essenciais
+    # 2. Remover registros com dados faltantes essenciais
     df.dropna(subset=['E-mail do convidado', 'Hora da entrada', 'Hora da saída'], inplace=True)
     registros_ignorados = registros_validos_antes - len(df)
     
@@ -67,7 +65,7 @@ def processar_assistencia(df_input):
                       "presentes": 0, "ausentes": 0}
 
     try:
-        # 4. Converter colunas de tempo para o formato datetime
+        # 3. Converter colunas de tempo para o formato datetime
         df['Hora da entrada'] = pd.to_datetime(df['Hora da entrada'])
         df['Hora da saída'] = pd.to_datetime(df['Hora da saída'])
         df['Data de início da reunião'] = pd.to_datetime(df['Data de início da reunião'])
@@ -76,7 +74,7 @@ def processar_assistencia(df_input):
         st.error(f"Erro ao converter colunas de data/hora. Verifique o formato dos dados. Erro: {e}")
         return None, None
 
-    # 5. Calcular a duração total da aula
+    # 4. Calcular a duração total da aula
     try:
         duracao_total_aula_min = (df['Data de término da reunião'].iloc[0] - df['Data de início da reunião'].iloc[0]).total_seconds() / 60
     except IndexError:
@@ -87,19 +85,19 @@ def processar_assistencia(df_input):
         st.error("Erro: Não foi possível calcular a duração da aula. Verifique as datas de início e término da reunião.")
         return None, None
 
-    # 6. Agrupar por e-mail para consolidar os registros de cada aluno
+    # 5. Agrupar por e-mail para consolidar os registros de cada aluno
     grupos_por_email = df.groupby('E-mail do convidado')
     
     resultados = []
 
-    # 7. Iterar sobre cada grupo (aluno) para consolidar os dados
+    # 6. Iterar sobre cada grupo (aluno) para consolidar os dados
     for email, grupo in grupos_por_email:
         entrada_consolidada = grupo['Hora da entrada'].min()
         saida_consolidada = grupo['Hora da saída'].max()
         tempo_total_min = grupo['Duração da presença'].sum()
         porcentagem_tempo = (tempo_total_min / duracao_total_aula_min) * 100
         
-        # 8. Análise por tramos (slots) de 60 minutos
+        # 7. Análise por tramos (slots) de 60 minutos
         tramos_participados = 0
         total_tramos = int(duracao_total_aula_min / 60)
         if duracao_total_aula_min % 60 > 0:
@@ -140,10 +138,10 @@ def processar_assistencia(df_input):
             'Status': status
         })
 
-    # 9. Gerar o novo DataFrame
+    # 8. Gerar o novo DataFrame
     df_final = pd.DataFrame(resultados)
     
-    # 10. Gerar o resumo
+    # 9. Gerar o resumo
     presentes = len(df_final[df_final['Status'] == 'Presente'])
     ausentes = len(df_final[df_final['Status'] == 'Ausente'])
     
@@ -170,62 +168,68 @@ uploaded_file = st.file_uploader("📥 Cargue el archivo CSV aquí", type=["csv"
 if uploaded_file is not None:
     try:
         df_input = None
-        read_configs = [
-            {'encoding': 'utf-16', 'delim_whitespace': True, 'header': 0},
-            {'encoding': 'utf-8-sig', 'sep': '\t', 'header': 0}, 
-            {'encoding': 'latin1', 'delim_whitespace': True, 'header': 0},
-            {'encoding': 'utf-8', 'delim_whitespace': True, 'header': 0},
-            {'encoding': 'utf-8', 'sep': ',', 'header': 0},
-            {'encoding': 'latin1', 'sep': ',', 'header': 0},
-            {'encoding': 'utf-8', 'sep': ';', 'header': 0},
-            {'encoding': 'latin1', 'sep': ';', 'header': 0},
-        ]
         
-        for config in read_configs:
+        # Leemos el contenido del archivo como texto para el análisis manual
+        file_content_bytes = uploaded_file.getvalue()
+        decoded_content = None
+        for encoding in ['utf-16', 'utf-8-sig', 'utf-8', 'latin1', 'cp1252']:
             try:
-                uploaded_file.seek(0)
-                df_input = pd.read_csv(uploaded_file, **config)
-                if not df_input.empty and len(df_input.columns) > 1:
-                    st.info(f"Arquivo lido com sucesso! Delimitador: '{config.get('sep', 'whitespace')}', Codificação: '{config['encoding']}'.")
-                    break  
-            except (UnicodeDecodeError, pd.errors.ParserError):
+                decoded_content = file_content_bytes.decode(encoding)
+                break
+            except UnicodeDecodeError:
                 continue
-            except Exception:
-                continue 
-
-        if df_input is None or df_input.empty or len(df_input.columns) <= 1:
-            st.error("Erro ao ler o arquivo. Não foi possível determinar a codificação ou o delimitador correto. Tente salvar o CSV como UTF-8 com vírgulas ou tabulações como delimitador.")
         
+        if decoded_content is None:
+            st.error("Não foi possível decodificar o arquivo. Tente salvá-lo em UTF-8.")
         else:
-            st.success("¡Archivo cargado con éxito!")
-            st.info("Procesando los datos... por favor, espere.")
-    
-            df_reporte, resumen_final = processar_assistencia(df_input)
-    
-            if df_reporte is not None:
-                col1, col2, col3, col4 = st.columns(4)
-                col1.metric("👥 Registros Totales", resumen_final['total_registros_processados'])
-                col2.metric("❌ Registros Ignorados", resumen_final['registros_ignorados'])
-                col3.metric("✅ Estudiantes Presentes", resumen_final['presentes'])
-                col4.metric("🚫 Estudiantes Ausentes", resumen_final['ausentes'])
-                
-                st.divider()
-                st.header("📊 Reporte Final de Asistencia")
-                st.dataframe(df_reporte, use_container_width=True)
-    
-                csv_buffer = io.StringIO()
-                df_reporte.to_csv(csv_buffer, index=False, encoding='utf-8')
-                csv_bytes = csv_buffer.getvalue().encode('utf-8')
-    
-                st.download_button(
-                    label="📤 Descargar Reporte CSV",
-                    data=csv_bytes,
-                    file_name="reporte_asistencia_moodle.csv",
-                    mime="text/csv",
-                    help="Clique para baixar o arquivo CSV final."
-                )
+            # Separamos el contenido en líneas para procesar el encabezado
+            lines = decoded_content.splitlines()
+            if not lines:
+                st.error("O arquivo está vazio.")
             else:
-                st.warning("No se pudo generar el reporte. Verifique el formato de su archivo CSV.")
+                # La primera línea contiene el encabezado. La segunda contiene los datos.
+                header_line = lines[0]
+                data_lines = lines[1:]
+                
+                # Leemos los datos a partir de la segunda línea, sin encabezado
+                df_input = pd.read_csv(io.StringIO("\n".join(data_lines)), header=None, encoding=None, sep='\t')
+                
+                # Limpiamos el encabezado de BOMs y espacios y lo usamos para nombrar las columnas
+                cleaned_header = [col.replace('\ufeff', '').strip() for col in header_line.split('\t')]
+                df_input.columns = cleaned_header
+                
+                # Removemos la fila vacía extra que a veces viene después del encabezado
+                df_input.dropna(how='all', inplace=True)
+                
+                st.success("¡Archivo cargado con éxito!")
+                st.info("Procesando los datos... por favor, espere.")
+        
+                df_reporte, resumen_final = processar_assistencia(df_input)
+        
+                if df_reporte is not None:
+                    col1, col2, col3, col4 = st.columns(4)
+                    col1.metric("👥 Registros Totales", resumen_final['total_registros_processados'])
+                    col2.metric("❌ Registros Ignorados", resumen_final['registros_ignorados'])
+                    col3.metric("✅ Estudiantes Presentes", resumen_final['presentes'])
+                    col4.metric("🚫 Estudiantes Ausentes", resumen_final['ausentes'])
+                    
+                    st.divider()
+                    st.header("📊 Reporte Final de Asistencia")
+                    st.dataframe(df_reporte, use_container_width=True)
+        
+                    csv_buffer = io.StringIO()
+                    df_reporte.to_csv(csv_buffer, index=False, encoding='utf-8')
+                    csv_bytes = csv_buffer.getvalue().encode('utf-8')
+        
+                    st.download_button(
+                        label="📤 Descargar Reporte CSV",
+                        data=csv_bytes,
+                        file_name="reporte_asistencia_moodle.csv",
+                        mime="text/csv",
+                        help="Clique para baixar o arquivo CSV final."
+                    )
+                else:
+                    st.warning("No se pudo generar el reporte. Verifique el formato de su archivo CSV.")
 
     except Exception as e:
         st.error(f"Ocurrió un error inesperado: {e}")
