@@ -86,7 +86,8 @@ def processar_assistencia(df_input):
         
         hora_inicio_aula = df['Data de início da reunião'].iloc[0]
         
-        for i in range total_tramos:
+        # CORREÇÃO AQUI: for i in range(total_tramos):
+        for i in range(total_tramos):
             inicio_tramo = hora_inicio_aula + timedelta(minutes=i*60)
             fim_tramo = inicio_tramo + timedelta(minutes=60)
             
@@ -148,7 +149,6 @@ uploaded_file = st.file_uploader("📥 Cargue el archivo CSV aquí", type=["csv"
 
 if uploaded_file is not None:
     try:
-        # AQUI ESTÁ A CORREÇÃO DE CODIFICAÇÃO E O AJUSTE DE DELIMITADOR
         df_input = None
         # Tentar com vírgula (,) como delimitador
         for encoding in ['utf-8', 'latin1', 'cp1252']:
