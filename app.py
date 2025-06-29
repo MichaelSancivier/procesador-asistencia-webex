@@ -14,14 +14,16 @@ def processar_assistencia(df_input):
     df = df_input.copy()  # Trabalhar com uma cópia para não modificar o DataFrame original
     
     # 1. Limpar os nomes das colunas: remover BOM e espaços em branco no início/fim
-    df.columns = [re.sub(r'^\ufeff|\ufeff', '', col).strip() for col in df.columns]
+    # O pd.read_csv com encoding='utf-8-sig' já lida com o BOM, mas esta é uma camada extra de segurança
+    df.columns = [col.replace('\ufeff', '').strip() for col in df.columns] # Remove UTF-8 BOM
+    df.columns = df.columns.str.strip() # Remove leading/trailing whitespace
     
     # ===============================================================
     # --- PASSO DE DEPURAÇÃO: EXIBIR AS COLUNAS Lidas ---
     # ===============================================================
     st.info(f"Colunas encontradas no arquivo (após limpeza): {list(df.columns)}")
     # ===============================================================
-
+    
     # Mapeamento de colunas esperadas (com nomes exatos confirmados)
     colunas_esperadas = [
         'Nome da reunião', 'Data de início da reunião', 'Data de término da reunião', 
@@ -153,12 +155,12 @@ uploaded_file = st.file_uploader("📥 Cargue el archivo CSV aquí", type=["csv"
 if uploaded_file is not None:
     try:
         df_input = None
-        # Lista de configurações para tentar:
-        # Priorizamos a leitura com `header=0` para que a primeira linha seja sempre o cabeçalho
+        # Lista de configurações para tentar (priorizando TSV e a codificação certa)
         read_configs = [
-            {'encoding': 'utf-16', 'delim_whitespace': True, 'header': 0},
-            {'encoding': 'utf-8-sig', 'delim_whitespace': True, 'header': 0}, # UTF-8 com BOM
-            {'encoding': 'utf-8', 'delim_whitespace': True, 'header': 0},
+            {'encoding': 'utf-16', 'sep': '\t', 'header': 0}, # Melhor tentativa
+            {'encoding': 'utf-8-sig', 'sep': '\t', 'header': 0},
+            {'encoding': 'latin1', 'sep': '\t', 'header': 0},
+            {'encoding': 'utf-8', 'delim_whitespace': True, 'header': 0}, # Mantém o que funcionou antes
             {'encoding': 'latin1', 'delim_whitespace': True, 'header': 0},
             {'encoding': 'utf-8', 'sep': ',', 'header': 0},
             {'encoding': 'latin1', 'sep': ',', 'header': 0},
@@ -176,7 +178,7 @@ if uploaded_file is not None:
             except (UnicodeDecodeError, pd.errors.ParserError):
                 continue
             except Exception:
-                continue # Continua se tiver outros erros de leitura
+                continue
 
         if df_input is None or df_input.empty or len(df_input.columns) <= 1:
             st.error("Erro ao ler o arquivo. Não foi possível determinar a codificação ou o delimitador correto. Tente salvar o CSV como UTF-8 com vírgulas ou tabulações como delimitador.")
