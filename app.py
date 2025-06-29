@@ -71,10 +71,9 @@ def processar_assistencia(df_input):
     # 3. Converter colunas de tempo para o formato datetime
     try:
         st.info("Tentando converter colunas de data/hora...")
-        # --- CORREÇÃO FINAL: REMOVER FORMATO DE FÓRMULA DO EXCEL ---
+        # REMOVER FORMATO DE FÓRMULA DO EXCEL
         for col in ['Hora da entrada', 'Hora da saída', 'Data de início da reunião', 'Data de término da reunião']:
             df[col] = df[col].astype(str).str.replace('="', '', regex=False).str.replace('"', '', regex=False)
-        # -----------------------------------------------------------
         
         df['Hora da entrada'] = pd.to_datetime(df['Hora da entrada'])
         df['Hora da saída'] = pd.to_datetime(df['Hora da saída'])
@@ -96,7 +95,7 @@ def processar_assistencia(df_input):
         st.error("Erro: Não foi possível calcular a duração da aula. Verifique as datas de início e término da reunião.")
         return None, None
 
-    # --- GARANTIR QUE NOME/SOBRENOME SEJAM STRINGS ---
+    # GARANTIR QUE NOME/SOBRENOME SEJAM STRINGS
     df['Nome'] = df['Nome'].fillna('').astype(str)
     df['Sobrenome'] = df['Sobrenome'].fillna('').astype(str)
 
@@ -132,7 +131,10 @@ def processar_assistencia(df_input):
                 tramos_participados += 1
 
         porcentagem_tramos = (tramos_participados / total_tramos) * 100 if total_tramos > 0 else 0
-        status = 'Presente' if porcentagem_tempo >= 80 and porcentagem_tramos >= 80 else 'Ausente'
+        
+        # --- CORREÇÃO FINAL: Substituir status por P e FI ---
+        status = 'P' if porcentagem_tempo >= 80 and porcentagem_tramos >= 80 else 'FI'
+        # -----------------------------------------------------
         
         nome_aluno = str(grupo.iloc[0]['Nome']) + ' ' + str(grupo.iloc[0]['Sobrenome'])
             
@@ -152,8 +154,8 @@ def processar_assistencia(df_input):
     df_final = pd.DataFrame(resultados)
     
     # 9. Gerar o resumo
-    presentes = len(df_final[df_final['Status'] == 'Presente'])
-    ausentes = len(df_final[df_final['Status'] == 'Ausente'])
+    presentes = len(df_final[df_final['Status'] == 'P'])
+    ausentes = len(df_final[df_final['Status'] == 'FI'])
     
     resumo = {
         "total_registros_processados": total_registros_processados,
