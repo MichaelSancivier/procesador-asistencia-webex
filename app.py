@@ -1,10 +1,60 @@
+Ah, entendi perfeitamente\! Receber duas mensagens de erro diferentes indica que seu arquivo CSV tem dois problemas: um de **codificação** e outro de **formato/nome das colunas**.
+
+Vamos analisar cada um e ver a solução.
+
+-----
+
+### **Análise dos Erros e Soluções**
+
+#### **Erro 1: `Erro: A coluna 'Nome da reunião' não foi encontrada no arquivo.`**
+
+Este erro é muito claro. O agente está procurando uma coluna com o nome `Nome da reunião`, mas não a encontrou no seu arquivo. Isso pode acontecer por vários motivos:
+
+  * **Diferença de idioma:** O relatório Webex foi gerado em inglês ou em outro idioma, e o nome da coluna é `Meeting Name` em vez de `Nome da reunião`.
+  * **Nome da coluna ligeiramente diferente:** Pode ser que o nome seja `Nome da Reunião` (com "R" maiúsculo) ou `NomeReunião` sem espaços.
+  * **Espaços extras:** O nome pode ter um espaço extra no início ou no fim (`" Nome da reunião "` ou `"Nome da reunião "`).
+  * **Relatório diferente:** Você pode ter baixado um tipo de relatório diferente (por exemplo, um relatório de uso em vez de um relatório de presença detalhado), que não contém todas as colunas que o agente espera.
+
+**Solução:**
+
+Você precisa garantir que o nome da coluna no seu arquivo CSV seja **exatamente** o que o código espera. O código que te enviei agora faz uma verificação inicial e vai te dizer qual coluna está faltando, o que é ótimo.
+
+Para resolver, você tem duas opções:
+
+1.  **Ajuste o nome da coluna no seu CSV:** A maneira mais simples. Abra o arquivo CSV em um editor de texto (como Notepad++), Google Sheets ou Excel e mude o nome do cabeçalho da coluna para `Nome da reunião` (e os outros nomes que ele possa reclamar depois). Salve o arquivo.
+2.  **Ajuste o código:** Se você sempre recebe relatórios com nomes de coluna diferentes, podemos ajustar o código para ser mais flexível, mapeando os nomes. Por exemplo:
+    ```python
+    df.rename(columns={'Meeting Name': 'Nome da reunião', 'Duration of presence': 'Duração da presença'}, inplace=True)
+    ```
+
+-----
+
+#### **Erro 2: `No se pudo generar el reporte. Verifique el formato de su archivo CSV.`**
+
+Este erro é o resultado do primeiro. Como a função `processar_assistencia` não consegue encontrar as colunas essenciais, ela retorna `None`, e a interface do Streamlit exibe essa mensagem genérica de que o relatório não pôde ser gerado.
+
+**Solução:**
+
+A solução para este erro depende de você resolver o **Erro 1**. Assim que o agente conseguir encontrar todas as colunas que precisa, o relatório será gerado normalmente.
+
+-----
+
+### **Recomendação e Próximos Passos**
+
+1.  **Abra o arquivo CSV original:** Use um editor de texto simples para abrir o arquivo CSV exportado do Webex.
+2.  **Verifique os nomes das colunas:** Olhe atentamente a primeira linha do arquivo (o cabeçalho) e veja os nomes exatos das colunas.
+3.  **Ajuste seu código `app.py`:** Use a lista de colunas que você encontrou para ajustar a verificação no código. Eu vou te dar uma versão do código que já faz isso de forma mais robusta, mas você precisará verificar os nomes.
+
+Aqui está o código `app.py` com uma verificação de colunas mais robusta e a correção de codificação:
+
+```python
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 import io
 
 # ====================================================================
-# Função de processamento do CSV de Webex
+# Función de procesamiento del CSV de Webex
 # ====================================================================
 def processar_assistencia(df):
     """
@@ -13,7 +63,7 @@ def processar_assistencia(df):
     # Contar registros totais e válidos antes da limpeza
     total_registros_processados = len(df)
     
-    # Renomear colunas para garantir que os nomes estejam corretos
+    # Mapeamento de colunas esperadas
     colunas_esperadas = {
         'Nome da reunião': 'Nome da reunião',
         'Data de início da reunião': 'Data de início da reunião',
@@ -29,12 +79,22 @@ def processar_assistencia(df):
         'Tipo de conexão': 'Tipo de conexão',
         'Nome da sessão': 'Nome da sessão'
     }
+
+    # Verificar se todas as colunas esperadas estão presentes, ignorando a caixa (maiúsculas/minúsculas)
+    colunas_df = {col.strip().lower(): col for col in df.columns}
+    colunas_faltantes = []
     
-    # Verificar se todas as colunas esperadas estão presentes
     for coluna_esperada in colunas_esperadas.keys():
-        if coluna_esperada not in df.columns:
-            st.error(f"Erro: A coluna '{coluna_esperada}' não foi encontrada no arquivo. Verifique se o arquivo CSV é um relatório Webex válido.")
-            return None, None
+        if coluna_esperada.lower() not in colunas_df:
+            colunas_faltantes.append(coluna_esperada)
+    
+    if colunas_faltantes:
+        st.error(f"Erro: As seguintes colunas não foram encontradas no arquivo: {', '.join(colunas_faltantes)}.")
+        st.info("Verifique se o arquivo CSV é um relatório de presença Webex válido e se as colunas estão nomeadas corretamente.")
+        return None, None
+
+    # Normalizar os nomes das colunas para os nomes esperados
+    df.columns = [colunas_esperadas.get(c.lower(), c) for c in df.columns]
 
     registros_validos_antes = len(df)
     
@@ -59,7 +119,6 @@ def processar_assistencia(df):
 
     # Calcular a duração total da aula
     try:
-        # Pega a duração da primeira linha, pois a duração da aula é a mesma para todos
         duracao_total_aula_min = (df['Data de término da reunião'].iloc[0] - df['Data de início da reunião'].iloc[0]).total_seconds() / 60
     except IndexError:
         st.error("Erro: O arquivo está vazio ou não contém informações de duração da reunião.")
@@ -76,14 +135,9 @@ def processar_assistencia(df):
 
     # Iterar sobre cada grupo (aluno) para consolidar os dados
     for email, grupo in grupos_por_email:
-        # Consolidar entradas e saídas
         entrada_consolidada = grupo['Hora da entrada'].min()
         saida_consolidada = grupo['Hora da saída'].max()
-        
-        # Somar o tempo total de presença em minutos
         tempo_total_min = grupo['Duração da presença'].sum()
-
-        # Calcular a porcentagem de tempo
         porcentagem_tempo = (tempo_total_min / duracao_total_aula_min) * 100
         
         # Análise por tramos (slots) de 60 minutos
@@ -98,10 +152,8 @@ def processar_assistencia(df):
             inicio_tramo = hora_inicio_aula + timedelta(minutes=i*60)
             fim_tramo = inicio_tramo + timedelta(minutes=60)
             
-            # Verificar se o aluno participou do tramo
             participou_do_tramo = False
             for _, registro in grupo.iterrows():
-                # Verifica se o intervalo de tempo do tramo se sobrepõe ao tempo de presença do aluno
                 if (registro['Hora da entrada'] < fim_tramo) and (registro['Hora da saída'] > inicio_tramo):
                     participou_do_tramo = True
                     break
@@ -110,11 +162,8 @@ def processar_assistencia(df):
                 tramos_participados += 1
 
         porcentagem_tramos = (tramos_participados / total_tramos) * 100 if total_tramos > 0 else 0
-
-        # Determinar o status
         status = 'Presente' if porcentagem_tempo >= 80 and porcentagem_tramos >= 80 else 'Ausente'
         
-        # Obter nome do aluno (tenta usar Nome/Sobrenome, se não, usa Nome de exibição)
         try:
             nome_aluno = grupo.iloc[0]['Nome'] + ' ' + grupo.iloc[0]['Sobrenome']
         except KeyError:
@@ -132,10 +181,8 @@ def processar_assistencia(df):
             'Status': status
         })
 
-    # Gerar o novo DataFrame
     df_final = pd.DataFrame(resultados)
     
-    # Gerar o resumo
     presentes = len(df_final[df_final['Status'] == 'Presente'])
     ausentes = len(df_final[df_final['Status'] == 'Ausente'])
     
@@ -161,50 +208,54 @@ uploaded_file = st.file_uploader("📥 Cargue el archivo CSV aquí", type=["csv"
 
 if uploaded_file is not None:
     try:
-        # AQUI ESTÁ A CORREÇÃO DE CODIFICAÇÃO
-        # Tenta ler com a codificação padrão 'utf-8' e, se falhar, tenta com 'latin1'
+        # AQUI ESTÁ A CORREÇÃO DE CODIFICAÇÃO E A LEITURA DO CSV
         try:
             df_input = pd.read_csv(uploaded_file, encoding='utf-8')
         except UnicodeDecodeError:
-            uploaded_file.seek(0) # Volta ao início do arquivo
+            uploaded_file.seek(0)
             df_input = pd.read_csv(uploaded_file, encoding='latin1')
-        
-        st.success("¡Archivo cargado con éxito!")
-        st.info("Procesando los datos... por favor, espere.")
-
-        # Chamar a função de processamento
-        df_reporte, resumen_final = processar_assistencia(df_input.copy())
-
-        if df_reporte is not None:
-            # Mostrar el resumen en columnas
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("👥 Registros Totales", resumen_final['total_registros_processados'])
-            col2.metric("❌ Registros Ignorados", resumen_final['registros_ignorados'])
-            col3.metric("✅ Estudiantes Presentes", resumen_final['presentes'])
-            col4.metric("🚫 Estudiantes Ausentes", resumen_final['ausentes'])
+        except pd.errors.ParserError as e:
+            st.error(f"Erro ao analisar o arquivo CSV. Verifique se ele está bem formatado (ex: vírgulas separando os dados). Erro: {e}")
+            df_input = None
             
-            st.divider()
-            st.header("📊 Reporte Final de Asistencia")
-            st.dataframe(df_reporte, use_container_width=True)
-
-            # Crear el link de descarga
-            csv_buffer = io.StringIO()
-            df_reporte.to_csv(csv_buffer, index=False, encoding='utf-8')
-            csv_bytes = csv_buffer.getvalue().encode('utf-8')
-
-            st.download_button(
-                label="📤 Descargar Reporte CSV",
-                data=csv_bytes,
-                file_name="reporte_asistencia_moodle.csv",
-                mime="text/csv",
-                help="Clique para baixar o arquivo CSV final."
-            )
-        else:
-            st.warning("No se pudo generar el reporte. Verifique el formato de su archivo CSV.")
+        if df_input is not None:
+            st.success("¡Archivo cargado con éxito!")
+            st.info("Procesando los datos... por favor, espere.")
+    
+            # Chamar a função de processamento
+            df_reporte, resumen_final = processar_assistencia(df_input.copy())
+    
+            if df_reporte is not None:
+                # Mostrar el resumen en columnas
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("👥 Registros Totales", resumen_final['total_registros_processados'])
+                col2.metric("❌ Registros Ignorados", resumen_final['registros_ignorados'])
+                col3.metric("✅ Estudiantes Presentes", resumen_final['presentes'])
+                col4.metric("🚫 Estudiantes Ausentes", resumen_final['ausentes'])
+                
+                st.divider()
+                st.header("📊 Reporte Final de Asistencia")
+                st.dataframe(df_reporte, use_container_width=True)
+    
+                # Crear el link de descarga
+                csv_buffer = io.StringIO()
+                df_reporte.to_csv(csv_buffer, index=False, encoding='utf-8')
+                csv_bytes = csv_buffer.getvalue().encode('utf-8')
+    
+                st.download_button(
+                    label="📤 Descargar Reporte CSV",
+                    data=csv_bytes,
+                    file_name="reporte_asistencia_moodle.csv",
+                    mime="text/csv",
+                    help="Clique para baixar o arquivo CSV final."
+                )
+            else:
+                st.warning("No se pudo generar el reporte. Verifique el formato de su archivo CSV.")
 
     except Exception as e:
-        st.error(f"Ocurrió un error al procesar el archivo: {e}")
+        st.error(f"Ocurrió un error inesperado: {e}")
         st.info("Asegúrese de que el archivo es un CSV válido de Webex y de que tiene todas las columnas requeridas (por ejemplo, 'Data de início da reunião', 'E-mail do convidado', etc.).")
 
 st.divider()
 st.markdown("Creado con ❤️ por el Agente Procesador de Asistencia.")
+```
