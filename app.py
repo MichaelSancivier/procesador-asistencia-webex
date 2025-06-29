@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 import io
+import re # Importar a biblioteca de expressões regulares
 
 # ====================================================================
 # Función de procesamiento del CSV de Webex
@@ -15,15 +16,16 @@ def processar_assistencia(df_input):
     # Contar registros totais e válidos antes da limpeza
     total_registros_processados = len(df)
     
-    # 1. Limpar os nomes das colunas: remover espaços em branco no início/fim
-    df.columns = df.columns.str.strip()
+    # 1. Limpar os nomes das colunas: remover BOM e espaços em branco no início/fim
+    df.columns = [re.sub(r'^\ufeff|\ufeff', '', col) for col in df.columns] # Remove UTF-8 BOM
+    df.columns = df.columns.str.strip() # Remove leading/trailing whitespace
     
     # ===============================================================
     # --- PASSO DE DEPURAÇÃO: EXIBIR AS COLUNAS Lidas ---
     # ===============================================================
     st.info(f"Colunas encontradas no arquivo (após limpeza): {list(df.columns)}")
     # ===============================================================
-
+    
     # Mapeamento de colunas esperadas (com nomes exatos confirmados)
     colunas_esperadas = [
         'Nome da reunião', 'Data de início da reunião', 'Data de término da reunião', 
@@ -178,7 +180,7 @@ if uploaded_file is not None:
         if df_input is None or df_input.empty or len(df_input.columns) <= 1:
             st.error("Erro ao ler o arquivo. Não foi possível determinar a codificação ou o delimitador correto. Tente salvar o CSV como UTF-8 com vírgulas ou tabulações como delimitador.")
         
-        else: # O DataFrame foi lido com sucesso
+        else:
             st.success("¡Archivo cargado con éxito!")
             st.info("Procesando los datos... por favor, espere.")
     
