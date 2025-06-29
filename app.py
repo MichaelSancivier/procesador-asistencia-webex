@@ -7,9 +7,10 @@ import re
 # ====================================================================
 # Función de procesamiento del CSV de Webex
 # ====================================================================
-def processar_assistencia(df_input):
+def processar_assistencia(df_input, duracao_fixa_min):
     """
-    Processa um DataFrame de lista de presença do Webex e gera um relatório.
+    Processa um DataFrame de lista de presença do Webex e gera um relatório
+    com base em uma duração de aula fixa.
     """
     df = df_input.copy()
     
@@ -38,37 +39,12 @@ def processar_assistencia(df_input):
     registros_validos_antes = len(df)
     
     # 1. Remover registros com dados faltantes essenciais
-    df.dropna(subset=['E-mail do convidado', 'Hora da entrada', 'Hora da saída', 'Duração da presença'], inplace=True)
+    df.dropna(subset=['E-mail do convidado', 'Hora da entrada', 'Hora da saída'], inplace=True)
     registros_ignorados = registros_validos_antes - len(df)
 
     st.info(f"Registros restantes após remover linhas com dados cruciais faltantes: {len(df)}")
 
-    # 2. Converter a coluna de duração para numérico
-    try:
-        df['Duração da presença'] = df['Duração da presença'].astype(str)
-        df['Duração da presença'] = df['Duração da presença'].str.replace(r'[^0-9,.]', '', regex=True)
-        df['Duração da presença'] = df['Duração da presença'].str.replace(',', '.', regex=False)
-        df['Duração da presença'] = pd.to_numeric(df['Duração da presença'], errors='coerce')
-        
-        st.info(f"Amostra da coluna 'Duração da presença' após a conversão: {list(df['Duração da presença'].head(5))}")
-        
-        registros_validos_antes_duracao = len(df)
-        df.dropna(subset=['Duração da presença'], inplace=True)
-        registros_ignorados += registros_validos_antes_duracao - len(df)
-        
-        st.info(f"Registros restantes após limpar a duração: {len(df)}")
-        
-    except Exception as e:
-        st.error(f"Erro ao limpar a coluna 'Duração da presença'. Erro: {e}")
-        return None, None
-
-    if df.empty:
-        st.warning("O DataFrame está vazio após a limpeza dos dados.")
-        return None, {"total_registros_processados": total_registros_processados, 
-                      "registros_ignorados": registros_ignorados, 
-                      "presentes": 0, "ausentes": 0}
-
-    # 3. Converter colunas de tempo para o formato datetime
+    # 2. Limpar e converter colunas de tempo
     try:
         st.info("Tentando converter colunas de data/hora...")
         # REMOVER FORMATO DE FÓRMULA DO EXCEL
@@ -84,40 +60,33 @@ def processar_assistencia(df_input):
         st.warning(f"Amostra de dados que causou o erro: {list(df['Hora da entrada'].head())}")
         return None, None
 
-    # 4. Calcular a duração total da aula
-    try:
-        duracao_total_aula_min = (df['Data de término da reunião'].iloc[0] - df['Data de início da reunião'].iloc[0]).total_seconds() / 60
-    except IndexError:
-        st.error("Erro: O arquivo está vazio ou não contém informações de duração da reunião.")
-        return None, None
-
-    if duracao_total_aula_min <= 0:
-        st.error("Erro: Não foi possível calcular a duração da aula. Verifique as datas de início e término da reunião.")
-        return None, None
-
+    if df.empty:
+        st.warning("O DataFrame está vazio após a limpeza dos dados.")
+        return None, {"total_registros_processados": total_registros_processados, 
+                      "registros_ignorados": registros_ignorados, 
+                      "presentes": 0, "ausentes": 0}
+    
     # GARANTIR QUE NOME/SOBRENOME SEJAM STRINGS
     df['Nome'] = df['Nome'].fillna('').astype(str)
     df['Sobrenome'] = df['Sobrenome'].fillna('').astype(str)
 
-    # 5. Agrupar por e-mail para consolidar os registros
+    # 3. Agrupar por e-mail para consolidar os registros
     grupos_por_email = df.groupby('E-mail do convidado')
     
     resultados = []
     
-    # 6. Iterar sobre cada grupo (aluno)
+    # 4. Iterar sobre cada grupo (aluno)
     for email, grupo in grupos_por_email:
         entrada_consolidada = grupo['Hora da entrada'].min()
         saida_consolidada = grupo['Hora da saída'].max()
-        tempo_total_min = grupo['Duração da presença'].sum()
-        porcentagem_tempo = (tempo_total_min / duracao_total_aula_min) * 100
         
-        # --- CÁLCULO SIMPLIFICADO: APENAS PORCENTAGEM DE TEMPO ---
-        # Removendo a lógica de tramos
-        tramos_participados = 0 # Mantemos a variável para evitar erros, mas ela não é usada
-        porcentagem_tramos = 0.0 # O mesmo para esta variável
+        # --- CORREÇÃO: CALCULAR TEMPO TOTAL COM BASE NO HORÁRIO CONSOLIDADO ---
+        tempo_total_min = (saida_consolidada - entrada_consolidada).total_seconds() / 60
+        
+        # --- CÁLCULO FINAL: USAR DURAÇÃO FIXA ---
+        porcentagem_tempo = (tempo_total_min / duracao_fixa_min) * 100
         
         status = 'P' if porcentagem_tempo >= 80 else 'FI'
-        # -----------------------------------------------------------
         
         nome_aluno = str(grupo.iloc[0]['Nome']) + ' ' + str(grupo.iloc[0]['Sobrenome'])
             
@@ -128,16 +97,13 @@ def processar_assistencia(df_input):
             'Saída Consolidada': saida_consolidada.strftime('%Y-%m-%d %H:%M:%S'),
             'Tempo Total (min)': round(tempo_total_min, 2),
             'Porcentagem de Tempo (%)': round(porcentagem_tempo, 2),
-            # Removendo as colunas de tramos do relatório final
-            # 'Tramos Participados': tramos_participados,
-            # 'Porcentagem de Tramos (%)': round(porcentagem_tramos, 2),
             'Status': status
         })
 
-    # 8. Gerar o novo DataFrame
+    # 5. Gerar o novo DataFrame
     df_final = pd.DataFrame(resultados)
     
-    # 9. Gerar o resumo
+    # 6. Gerar o resumo
     presentes = len(df_final[df_final['Status'] == 'P'])
     ausentes = len(df_final[df_final['Status'] == 'FI'])
     
@@ -158,6 +124,16 @@ st.set_page_config(page_title="Procesador de Asistencia Webex", layout="wide", p
 st.title("👨‍🏫 Procesador de Asistencia para Moodle")
 st.markdown("Suba su archivo CSV de la lista de presencia de Webex para generar un informe listo para importar en Moodle.")
 st.divider()
+
+# --- NOVO CAMPO DE ENTRADA PARA A DURAÇÃO FIXA ---
+duracao_fixa = st.number_input(
+    "📏 **Duração Total da Aula (em minutos):**",
+    min_value=1,
+    value=240,
+    help="Insira a duração planejada da aula para calcular a porcentagem de tempo. Padrão: 240 min (4 horas)."
+)
+st.divider()
+# --------------------------------------------------
 
 uploaded_file = st.file_uploader("📥 Cargue el archivo CSV aquí", type=["csv"])
 
@@ -189,14 +165,14 @@ if uploaded_file is not None:
             except Exception:
                 continue
 
-        if df_input is None or df_input.empty or len(df_input.columns) <= 1:
+        if df_input is None or df_input is None or len(df_input.columns) <= 1:
             st.error("Erro ao ler o arquivo. Não foi possível determinar a codificação ou o delimitador correto. Tente salvar o CSV como UTF-8 com vírgulas ou tabulações como delimitador.")
         
         else:
             st.success("¡Archivo cargado con éxito!")
             st.info("Procesando los datos... por favor, espere.")
     
-            df_reporte, resumen_final = processar_assistencia(df_input)
+            df_reporte, resumen_final = processar_assistencia(df_input, duracao_fixa)
     
             if df_reporte is not None:
                 col1, col2, col3, col4 = st.columns(4)
