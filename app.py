@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import io
 
 # ====================================================================
-# Función de procesamiento del CSV de Webex
+# Função de processamento do CSV de Webex
 # ====================================================================
 def processar_assistencia(df):
     """
@@ -13,42 +13,28 @@ def processar_assistencia(df):
     # Contar registros totais e válidos antes da limpeza
     total_registros_processados = len(df)
     
-    # Mapeamento de colunas esperadas
-    colunas_esperadas = {
-        'Nome da reunião': 'Nome da reunião',
-        'Data de início da reunião': 'Data de início da reunião',
-        'Data de término da reunião': 'Data de término da reunião',
-        'Nome de exibição': 'Nome de exibição',
-        'Nome': 'Nome',
-        'Sobrenome': 'Sobrenome',
-        'Função': 'Função',
-        'E-mail do convidado': 'E-mail do convidado',
-        'Hora da entrada': 'Hora da entrada',
-        'Hora da saída': 'Hora da saída',
-        'Duração da presença': 'Duração da presença',
-        'Tipo de conexão': 'Tipo de conexão',
-        'Nome da sessão': 'Nome da sessão'
-    }
-
-    # Verificar se todas as colunas esperadas estão presentes, ignorando a caixa (maiúsculas/minúsculas)
-    colunas_df = {col.strip().lower(): col for col in df.columns}
-    colunas_faltantes = []
+    # 1. Limpar os nomes das colunas: remover espaços em branco no início/fim
+    df.columns = df.columns.str.strip()
     
-    for coluna_esperada in colunas_esperadas.keys():
-        if coluna_esperada.lower() not in colunas_df:
-            colunas_faltantes.append(coluna_esperada)
+    # Mapeamento de colunas esperadas (com nomes exatos confirmados)
+    colunas_esperadas = [
+        'Nome da reunião', 'Data de início da reunião', 'Data de término da reunião', 
+        'Nome de exibição', 'Nome', 'Sobrenome', 'Função', 'E-mail do convidado', 
+        'Hora da entrada', 'Hora da saída', 'Duração da presença', 
+        'Tipo de conexão', 'Nome da sessão'
+    ]
+
+    # 2. Verificar se todas as colunas esperadas estão presentes
+    colunas_faltantes = [col for col in colunas_esperadas if col not in df.columns]
     
     if colunas_faltantes:
-        st.error(f"Erro: As seguintes colunas não foram encontradas no arquivo: {', '.join(colunas_faltantes)}.")
+        st.error(f"Erro: As seguintes colunas não foram encontradas no arquivo: **{', '.join(colunas_faltantes)}**.")
         st.info("Verifique se o arquivo CSV é um relatório de presença Webex válido e se as colunas estão nomeadas corretamente.")
         return None, None
 
-    # Normalizar os nomes das colunas para os nomes esperados
-    df.columns = [colunas_esperadas.get(c.lower(), c) for c in df.columns]
-
     registros_validos_antes = len(df)
     
-    # Remover registros com dados faltantes essenciais
+    # 3. Remover registros com dados faltantes essenciais
     df.dropna(subset=['E-mail do convidado', 'Hora da entrada', 'Hora da saída'], inplace=True)
     registros_ignorados = registros_validos_antes - len(df)
     
@@ -58,7 +44,7 @@ def processar_assistencia(df):
                       "presentes": 0, "ausentes": 0}
 
     try:
-        # Converter colunas de tempo para o formato datetime
+        # 4. Converter colunas de tempo para o formato datetime
         df['Hora da entrada'] = pd.to_datetime(df['Hora da entrada'])
         df['Hora da saída'] = pd.to_datetime(df['Hora da saída'])
         df['Data de início da reunião'] = pd.to_datetime(df['Data de início da reunião'])
@@ -67,7 +53,7 @@ def processar_assistencia(df):
         st.error(f"Erro ao converter colunas de data/hora. Verifique o formato dos dados. Erro: {e}")
         return None, None
 
-    # Calcular a duração total da aula
+    # 5. Calcular a duração total da aula
     try:
         duracao_total_aula_min = (df['Data de término da reunião'].iloc[0] - df['Data de início da reunião'].iloc[0]).total_seconds() / 60
     except IndexError:
@@ -78,19 +64,19 @@ def processar_assistencia(df):
         st.error("Erro: Não foi possível calcular a duração da aula. Verifique as datas de início e término da reunião.")
         return None, None
 
-    # Agrupar por e-mail para consolidar os registros de cada aluno
+    # 6. Agrupar por e-mail para consolidar os registros de cada aluno
     grupos_por_email = df.groupby('E-mail do convidado')
     
     resultados = []
 
-    # Iterar sobre cada grupo (aluno) para consolidar os dados
+    # 7. Iterar sobre cada grupo (aluno) para consolidar os dados
     for email, grupo in grupos_por_email:
         entrada_consolidada = grupo['Hora da entrada'].min()
         saida_consolidada = grupo['Hora da saída'].max()
         tempo_total_min = grupo['Duração da presença'].sum()
         porcentagem_tempo = (tempo_total_min / duracao_total_aula_min) * 100
         
-        # Análise por tramos (slots) de 60 minutos
+        # 8. Análise por tramos (slots) de 60 minutos
         tramos_participados = 0
         total_tramos = int(duracao_total_aula_min / 60)
         if duracao_total_aula_min % 60 > 0:
@@ -131,8 +117,10 @@ def processar_assistencia(df):
             'Status': status
         })
 
+    # 9. Gerar o novo DataFrame
     df_final = pd.DataFrame(resultados)
     
+    # 10. Gerar o resumo
     presentes = len(df_final[df_final['Status'] == 'Presente'])
     ausentes = len(df_final[df_final['Status'] == 'Ausente'])
     
@@ -158,7 +146,8 @@ uploaded_file = st.file_uploader("📥 Cargue el archivo CSV aquí", type=["csv"
 
 if uploaded_file is not None:
     try:
-        # AQUI ESTÁ A CORREÇÃO DE CODIFICAÇÃO E A LEITURA DO CSV
+        # AQUI ESTÁ A CORREÇÃO DE CODIFICAÇÃO
+        # Tenta ler com a codificação padrão 'utf-8' e, se falhar, tenta com 'latin1'
         try:
             df_input = pd.read_csv(uploaded_file, encoding='utf-8')
         except UnicodeDecodeError:
@@ -204,7 +193,7 @@ if uploaded_file is not None:
 
     except Exception as e:
         st.error(f"Ocurrió un error inesperado: {e}")
-        st.info("Asegúrese de que el archivo es un CSV válido de Webex y de que tiene todas las columnas requeridas (por ejemplo, 'Data de início da reunião', 'E-mail do convidado', etc.).")
+        st.info("Asegúrese de que el archivo es un CSV válido de Webex y de que tiene todas las columnas requeridas.")
 
 st.divider()
 st.markdown("Creado con ❤️ por el Agente Procesador de Asistencia.")
