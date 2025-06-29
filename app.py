@@ -4,12 +4,14 @@ from datetime import datetime, timedelta
 import io
 
 # ====================================================================
-# Função de processamento do CSV de Webex
+# Función de procesamiento del CSV de Webex
 # ====================================================================
-def processar_assistencia(df):
+def processar_assistencia(df_input):
     """
     Processa um DataFrame de lista de presença do Webex e gera um relatório.
     """
+    df = df_input.copy()  # Trabalhar com uma cópia para não modificar o DataFrame original
+    
     # Contar registros totais e válidos antes da limpeza
     total_registros_processados = len(df)
     
@@ -84,7 +86,7 @@ def processar_assistencia(df):
         
         hora_inicio_aula = df['Data de início da reunião'].iloc[0]
         
-        for i in range(total_tramos):
+        for i in range total_tramos:
             inicio_tramo = hora_inicio_aula + timedelta(minutes=i*60)
             fim_tramo = inicio_tramo + timedelta(minutes=60)
             
@@ -146,23 +148,37 @@ uploaded_file = st.file_uploader("📥 Cargue el archivo CSV aquí", type=["csv"
 
 if uploaded_file is not None:
     try:
-        # AQUI ESTÁ A CORREÇÃO DE CODIFICAÇÃO
-        # Tenta ler com a codificação padrão 'utf-8' e, se falhar, tenta com 'latin1'
-        try:
-            df_input = pd.read_csv(uploaded_file, encoding='utf-8')
-        except UnicodeDecodeError:
-            uploaded_file.seek(0)
-            df_input = pd.read_csv(uploaded_file, encoding='latin1')
-        except pd.errors.ParserError as e:
-            st.error(f"Erro ao analisar o arquivo CSV. Verifique se ele está bem formatado (ex: vírgulas separando os dados). Erro: {e}")
-            df_input = None
+        # AQUI ESTÁ A CORREÇÃO DE CODIFICAÇÃO E O AJUSTE DE DELIMITADOR
+        df_input = None
+        # Tentar com vírgula (,) como delimitador
+        for encoding in ['utf-8', 'latin1', 'cp1252']:
+            try:
+                uploaded_file.seek(0)
+                df_input = pd.read_csv(uploaded_file, encoding=encoding, sep=',')
+                break  # Se a leitura for bem-sucedida, saia do loop
+            except (UnicodeDecodeError, pd.errors.ParserError):
+                continue
+        
+        # Se a vírgula falhar, tentar com ponto e vírgula (;)
+        if df_input is None:
+            for encoding in ['utf-8', 'latin1', 'cp1252']:
+                try:
+                    uploaded_file.seek(0)
+                    df_input = pd.read_csv(uploaded_file, encoding=encoding, sep=';')
+                    break
+                except (UnicodeDecodeError, pd.errors.ParserError):
+                    continue
+        
+        # Se ainda assim falhar, emitir um erro
+        if df_input is None:
+            st.error("Erro ao ler o arquivo. Não foi possível determinar a codificação ou o delimitador. Tente salvar o CSV como UTF-8 com vírgulas como delimitador.")
             
-        if df_input is not None:
+        elif df_input is not None:
             st.success("¡Archivo cargado con éxito!")
             st.info("Procesando los datos... por favor, espere.")
     
             # Chamar a função de processamento
-            df_reporte, resumen_final = processar_assistencia(df_input.copy())
+            df_reporte, resumen_final = processar_assistencia(df_input)
     
             if df_reporte is not None:
                 # Mostrar el resumen en columnas
