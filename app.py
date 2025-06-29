@@ -86,7 +86,6 @@ def processar_assistencia(df_input):
         
         hora_inicio_aula = df['Data de início da reunião'].iloc[0]
         
-        # CORREÇÃO AQUI: for i in range(total_tramos):
         for i in range(total_tramos):
             inicio_tramo = hora_inicio_aula + timedelta(minutes=i*60)
             fim_tramo = inicio_tramo + timedelta(minutes=60)
@@ -150,28 +149,42 @@ uploaded_file = st.file_uploader("📥 Cargue el archivo CSV aquí", type=["csv"
 if uploaded_file is not None:
     try:
         df_input = None
-        # Tentar com vírgula (,) como delimitador
+        # Tentar ler com o delimitador de tabulação (\t) e diferentes codificações
         for encoding in ['utf-8', 'latin1', 'cp1252']:
             try:
                 uploaded_file.seek(0)
-                df_input = pd.read_csv(uploaded_file, encoding=encoding, sep=',')
-                break  # Se a leitura for bem-sucedida, saia do loop
+                df_input = pd.read_csv(uploaded_file, encoding=encoding, sep='\t')
+                # Se a leitura for bem-sucedida e o DataFrame não for vazio, use este
+                if not df_input.empty and len(df_input.columns) > 1:
+                    break  
             except (UnicodeDecodeError, pd.errors.ParserError):
                 continue
         
-        # Se a vírgula falhar, tentar com ponto e vírgula (;)
-        if df_input is None:
+        # Se a tabulação falhar, tentar com vírgula (,) e diferentes codificações
+        if df_input is None or df_input.empty or len(df_input.columns) <= 1:
+            for encoding in ['utf-8', 'latin1', 'cp1252']:
+                try:
+                    uploaded_file.seek(0)
+                    df_input = pd.read_csv(uploaded_file, encoding=encoding, sep=',')
+                    if not df_input.empty and len(df_input.columns) > 1:
+                        break
+                except (UnicodeDecodeError, pd.errors.ParserError):
+                    continue
+
+        # Se a vírgula falhar, tentar com ponto e vírgula (;) e diferentes codificações
+        if df_input is None or df_input.empty or len(df_input.columns) <= 1:
             for encoding in ['utf-8', 'latin1', 'cp1252']:
                 try:
                     uploaded_file.seek(0)
                     df_input = pd.read_csv(uploaded_file, encoding=encoding, sep=';')
-                    break
+                    if not df_input.empty and len(df_input.columns) > 1:
+                        break
                 except (UnicodeDecodeError, pd.errors.ParserError):
                     continue
-        
+
         # Se ainda assim falhar, emitir um erro
-        if df_input is None:
-            st.error("Erro ao ler o arquivo. Não foi possível determinar a codificação ou o delimitador. Tente salvar o CSV como UTF-8 com vírgulas como delimitador.")
+        if df_input is None or df_input.empty or len(df_input.columns) <= 1:
+            st.error("Erro ao ler o arquivo. Não foi possível determinar a codificação ou o delimitador correto. Tente salvar o CSV como UTF-8 com vírgulas ou tabulações como delimitador.")
             
         elif df_input is not None:
             st.success("¡Archivo cargado con éxito!")
@@ -195,21 +208,4 @@ if uploaded_file is not None:
                 # Crear el link de descarga
                 csv_buffer = io.StringIO()
                 df_reporte.to_csv(csv_buffer, index=False, encoding='utf-8')
-                csv_bytes = csv_buffer.getvalue().encode('utf-8')
-    
-                st.download_button(
-                    label="📤 Descargar Reporte CSV",
-                    data=csv_bytes,
-                    file_name="reporte_asistencia_moodle.csv",
-                    mime="text/csv",
-                    help="Clique para baixar o arquivo CSV final."
-                )
-            else:
-                st.warning("No se pudo generar el reporte. Verifique el formato de su archivo CSV.")
-
-    except Exception as e:
-        st.error(f"Ocurrió un error inesperado: {e}")
-        st.info("Asegúrese de que el archivo es un CSV válido de Webex y de que tiene todas las columnas requeridas.")
-
-st.divider()
-st.markdown("Creado con ❤️ por el Agente Procesador de Asistencia.")
+                csv_bytes
